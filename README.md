@@ -1,3 +1,4 @@
 # DAS-Group-18
 
-#Just checking
+Data visualiation is finished.
+We can use GLM model for poisson response to fit the model in the formal analysis.
