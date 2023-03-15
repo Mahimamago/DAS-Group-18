@@ -6,25 +6,120 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+library(sjPlot)
+library(stats) 
+library(jtools)
+library(knitr)
+library(janitor)
+library(ggplot2)
+library(ggpubr)
+library(MASS)
+library(GGally)
+library(gridExtra)
 ```
 
-## R Markdown
-
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
+```{r loading dataset, include=FALSE}
+animal_shelter<-read.csv("dataset18.csv")
+head(animal_shelter)
 ```
 
-## Including Plots
-
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
+```{r compare mean and variance of response, include=FALSE}
+mean(animal_shelter$time_at_shelter)
+var(animal_shelter$time_at_shelter)
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+In that case, we choose negative binomial GLM model for count response to fit model.
+
+```{r pair plot without animal_type, include=FALSE}
+ggpairs(animal_shelter[,c(-1)],
+       upper=list(continuous=wrap("points",alpha=0.4,color="blue")),
+       lower="blank",axisLabels="none")
+```
+
+```{r fit the negative.binomial GLM model, include=FALSE}
+nebi_model1<-glm.nb(time_at_shelter ~ animal_type + month + year + intake_type + outcome_type + chip_status,data = animal_shelter)
+
+nebi_model1 %>%
+  summary()
+```
+
+
+```{r determine the significance of the regression coefficients, include=FALSE}
+drop1(nebi_model1, test = "F")
+```
+
+```{r delete unsignificant coefficient, include=FALSE}
+#delete unsignificant animal_type and month and year to fit a new Nebi GLM model
+nebi_model2<-glm(time_at_shelter~ intake_type + outcome_type + chip_status, 
+                          family = negative.binomial(0.9634), data = animal_shelter)
+
+nebi_model2%>%
+  summary()
+
+```
+
+
+```{r determine the significance of coefficients, include=FALSE}
+#determine the significance of the regression coefficients
+drop1(nebi_model2, test = "F")
+```
+
+```{r check the overdispersion, include=FALSE}
+ggplot(nebi_model2, aes(x=log(fitted(nebi_model2)), y=log((animal_shelter$time_at_shelter-fitted(nebi_model2))^2)))+
+  geom_point(col="red") +
+  geom_abline(slope=1, intercept=0, col="blue", size=1) +
+  ylab(expression((y-hat(mu))^2)) + xlab(expression(hat(mu)))
+```
+
+```{r Residual plots vs. predicted, include=FALSE}
+pred <- predict(nebi_model1, type = "response")
+stand.resid <- rstandard(model = nebi_model1, type = "pearson")
+
+par(mfrow=c(1,2))
+plot(x = pred, y = stand.resid, xlab = "Predicted count", ylab = "Standardised Pearson residuals",
+     main = "Full model likelihood", ylim = c(-2,5))
+abline(h = c(-3, -2, 0, 2, 3), lty = "dotted", col = "red")
+
+pred <- predict(nebi_model2, type = "response")
+stand.resid <- rstandard(model = nebi_model2, type = "pearson") # Standardised Pearson residuals
+
+plot(x = pred, y = stand.resid, xlab = "Predicted count", ylab = "Standardised Pearson residuals",
+     main = "Drop-off likelihood", ylim = c(-2,5))
+abline(h = c(-3, -2, 0, 2, 3), lty = "dotted", col = "red")
+
+```
+
+```{r compare full model and drop-off model at their deviance and AIC, include=FALSE}
+c(nebi_model1$deviance, nebi_model1$aic)
+c(nebi_model2$deviance, nebi_model2$aic)
+```
+
+```{r #check the large deviance, include=FALSE}
+resp <- resid(nebi_model2, type = "pearson")
+resd <- resid(nebi_model2, type = "deviance")
+p1<- ggplot(nebi_model2, aes(sample = resp)) + geom_point(stat = "qq", color = "green") +
+  ylab("Pearson residuals")
+p2<- ggplot(nebi_model2, aes(sample = resd)) + geom_point(stat = "qq", color = "green") +
+  ylab("Deviance residuals")
+p3<- ggplot(nebi_model2, aes(x = predict(nebi_model2, type="link"), y =resd))+
+  geom_point(col = "green") +
+  ylab("Deviance residuals") + xlab("Linear predictor")
+grid.arrange(p1, p2, p3, nrow = 1)
+```
+
+```{r Plot of squared residuals v predicted values, include=FALSE}
+res.sq <- residuals(nebi_model2, type = "response")^2
+set1 <- data.frame(res.sq, mu.hat = nebi_model2$fitted.values)
+fit.lin <- lm(formula = res.sq ~ mu.hat, data = set1)
+fit.quad <- lm(formula = res.sq ~ mu.hat + I(mu.hat^2), data = set1)
+summary(fit.quad)
+
+plot(set1$mu.hat, y = set1$res.sq, xlab = "Predicted count",
+     ylab = "Squared Residual")
+curve(expr = predict(fit.lin, newdata = data.frame(mu.hat = x), type = "response"),
+      col = "blue", add = TRUE, lty = "solid")
+curve(expr = predict(fit.quad, newdata = data.frame(mu.hat = x), type = "response"),
+      col = "red", add = TRUE, lty = "dashed")
+legend("topleft", legend = c("Linear", "Quadratic"), col = c("red", "blue"),
+       lty = c("solid", "dashed"), bty = "n")
+```
