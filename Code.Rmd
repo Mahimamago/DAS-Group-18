@@ -28,13 +28,39 @@ mean(animal_shelter$time_at_shelter)
 var(animal_shelter$time_at_shelter)
 ```
 
-In that case, we choose negative binomial GLM model for count response to fit model.
+# Formal Data Analysis
 
-```{r pair plot without animal_type, include=FALSE}
-ggpairs(animal_shelter[,c(-1)],
-       upper=list(continuous=wrap("points",alpha=0.4,color="blue")),
-       lower="blank",axisLabels="none")
+As we need to predict what all factors affect the number of days an animal spends in the shelter by fitting a Generalised Linear Model, the number of days will be our response variable. This variable is actually a counts data, hence the distribution that we would consider first is Poisson distribution.
+
+```{r fit poisson GLM model, include=FALSE}
+pois_model<-glm(time_at_shelter ~ animal_type + month + year + intake_type + outcome_type + chip_status,data = animal_shelter,family="poisson")
+
+summary(pois_model)
 ```
+
+From this model, we can see that Animal type is not a significant variable. The p-value for all the types is greater than 0.05. Hence, we can conclude that the animal type does not have a significant effect on the number of days an animal spends in the shelter. We will drop this variable and fit the model again.
+
+```{r fit poisson GLM model without animal type, include=FALSE}
+pois_model2<-glm(time_at_shelter ~ month + year + intake_type + outcome_type + chip_status,data = animal_shelter,family="poisson")
+
+summary(pois_model2)
+```
+
+After removing animal type, which was not significant the AIC for the model increased by almost 30 points which is absurd. Both the residual deviance and the AIC are really high for this model. If we check the ratio for Residual deviance to the degrees of freedom for both the models, it is quite higher than 1. This might be due to Overdispersion. We can do some other tests to check for overdispersion.
+
+```{r check the overdispersion by plot, include=FALSE}
+ggplot(pois_model, aes(x=log(fitted(pois_model)), y=log((animal_shelter$time_at_shelter-fitted(pois_model))^2)))+
+  geom_point(col="red") +
+  geom_abline(slope=1, intercept=0, col="blue", size=1) +
+  ylab(expression((y-hat(mu))^2)) + xlab(expression(hat(mu)))
+```
+The above figure does not give us a clear picture for overdispersion. Hence we can use some in-built functions to check for the same.
+
+```{r check for overdispersion through function, include=FALSE}
+dispersiontest(model1,trafo=1)
+```
+
+Here, the estimated value for alpha is much greater than 0. Hence, we can conclude that overdispersion is present. In order to deal with this, instead of fitting a model with poisson distribution, we can fit a model with Negative Binomial distribution.
 
 ```{r fit the negative.binomial GLM model, include=FALSE}
 nebi_model1<-glm.nb(time_at_shelter ~ animal_type + month + year + intake_type + outcome_type + chip_status,data = animal_shelter)
@@ -43,10 +69,13 @@ nebi_model1 %>%
   summary()
 ```
 
+From the model, we can see that the AIC has significantly reduced along with the Deviance. On the other hand, there are three variables now that are not significant, animal type, month and year. The p-value for all these variables is greater than 0.05. Hence, we can say we have sufficient evidence to conclude that these variables do not significantly affect the number of days spent in the shelter by animals. We can confirm the significance of variables by the following test first.
 
 ```{r determine the significance of the regression coefficients, include=FALSE}
 drop1(nebi_model1, test = "F")
 ```
+
+Now, we can fit our model by removing the insignificant variables.
 
 ```{r delete unsignificant coefficient, include=FALSE}
 #delete unsignificant animal_type and month and year to fit a new Nebi GLM model
@@ -58,17 +87,18 @@ nebi_model2%>%
 
 ```
 
+We can see here, that after removing the three variables the AIC and Deviance have increased slightly. But this change is very low and hence acceptable with the change in the degrees of freedom. We can check once again for the significance of the remaining variables through the F-test.
 
 ```{r determine the significance of coefficients, include=FALSE}
 #determine the significance of the regression coefficients
 drop1(nebi_model2, test = "F")
 ```
 
-```{r check the overdispersion, include=FALSE}
-ggplot(nebi_model2, aes(x=log(fitted(nebi_model2)), y=log((animal_shelter$time_at_shelter-fitted(nebi_model2))^2)))+
-  geom_point(col="red") +
-  geom_abline(slope=1, intercept=0, col="blue", size=1) +
-  ylab(expression((y-hat(mu))^2)) + xlab(expression(hat(mu)))
+From the above test we can conclude that no more variables can be removed from the model here. As with the drop of each variable, the AIC and Deviance are both increasing significantly. Thus, this is our final model now. We need to check if this model is fulfilling all the assumptions.
+
+```{r compare full model and drop-off model at their deviance and AIC, include=FALSE}
+c(nebi_model1$deviance, nebi_model1$aic)
+c(nebi_model2$deviance, nebi_model2$aic)
 ```
 
 ```{r Residual plots vs. predicted, include=FALSE}
@@ -89,10 +119,7 @@ abline(h = c(-3, -2, 0, 2, 3), lty = "dotted", col = "red")
 
 ```
 
-```{r compare full model and drop-off model at their deviance and AIC, include=FALSE}
-c(nebi_model1$deviance, nebi_model1$aic)
-c(nebi_model2$deviance, nebi_model2$aic)
-```
+
 
 ```{r #check the large deviance, include=FALSE}
 resp <- resid(nebi_model2, type = "pearson")
