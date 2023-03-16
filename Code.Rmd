@@ -12,7 +12,7 @@ knitr::opts_chunk$set(echo = TRUE)
 # Exploratory Aanlysis
 
 ```{r reading dataset, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = FALSE)
 animal_shelter<-read.csv("dataset18.csv")
 head(animal_shelter)
 glimpse(animal_shelter)
