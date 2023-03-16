@@ -2,29 +2,206 @@
 title: "Code"
 author: "Mahima Mago"
 date: "2023-03-10"
-output: html_document
+output:
+  pdf_document:
+    number_sections: yes
+fig_caption : yes
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
-
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
+```{r libraries}
+library(tidyverse)
+library(dplyr)
+library(kableExtra)
 ```
 
-## Including Plots
-
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
+```{r reading dataset, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#Reading in the data
+animal_shelter<-read.csv("dataset18.csv")
+#Summary of data
+head(animal_shelter)
+glimpse(animal_shelter)
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+```{r additinal code}
+
+#Data transformation for EDA
+
+animal_shelter$animal_type <- as.factor(animal_shelter$animal_type)
+levels(animal_shelter$chip_status) <- c("BIRD", "DOG","CAT","WILDLIFE","LIVESTOCK")
+animal_shelter$intake_type <- as.factor(animal_shelter$intake_type)
+animal_shelter$outcome_type <- as.factor(animal_shelter$outcome_type)
+animal_shelter$chip_status <- as.factor(animal_shelter$chip_status)
+
+```
+
+\newpage
+
+# Introduction {#sec:intro}
+
+# Exploratory Aanlysis {#sec:sub}
+
+Below graph displays the probability density function of the number of days spent by an animal in the shelter.
+
+```{r pdf of number of days animal spends in the shelter, include=TRUE, out.width='70%', fig.align='center', fig.pos='H', warning=FALSE, fig.cap="\\label{fig:dens} Density plot for the Number of days spent in the shelter"}
+ggplot(animal_shelter, aes(x = time_at_shelter)) + 
+  geom_density(color = "blue")+
+  labs(x="Number of days at Shelter", title="Density plot for the number of days at shelter")
+
+```
+
+From Figure \ref{fig:dens}, the variable number of days spent at the shelter appears to have a right skewed distribution. It seems that more number of animals have spent lesser days in the shelter.
+
+## Types of Animals
+
+```{r}
+animal_shelter%>%
+  group_by(animal_type)%>%
+  summarize(Count=length(time_at_shelter),Mean=mean(time_at_shelter),Std_dev=sd(time_at_shelter),
+            Min=min(time_at_shelter),
+            Median=median(time_at_shelter),Max=max(time_at_shelter))%>%
+  kable(caption = '\\label{tab:summ} Summary statistics of Number of days in shelter by Animal type .',
+booktabs = TRUE, format = "latex", digits=2) %>%
+  kable_styling(font_size = 10, latex_options = "hold_position")
+
+```
+
+Table \ref{tab:summ} displays the summary statistics for the number of days spent in the shelter by types of animals. Here, we can see that most animals admitted to the shelter are dogs and the least are birds and livestock. Again, on an average dogs have stayed the longest in the shelter as they have the largest mean number of days followed by cats and the birds along with livestock left at the same day. 
+
+```{r barchart and boxplot of animal_type and time_in _shelter, include=TRUE, out.width='70%', fig.align='center', fig.pos='H', warning=FALSE, fig.cap="\\label{fig:box} Number of days spent at the shelter by Animal type"}
+ggplot(data = animal_shelter, aes(x = animal_type, y = time_at_shelter, fill = animal_type)) +
+  geom_boxplot() +
+  labs(x = "The number of days spent in the shelter of different animals", y = "The number of days")+ 
+  theme(legend.position = "none")
+```
+
+Figure \ref{fig:box} displays a boxplot of the number of days spent by the types of animals in the shelter.
+The results from here agree with what we have concluded from the Summary statistics earlier. It can also be seen that Dogs and Cats have a lot of outliers.
+
+## Months
+
+```{r factor month,include=FALSE}
+animal_shelter$month
+factor(animal_shelter$month)
+```
+
+```{r Barchart of month and time_in _shelter, include=TRUE,out.width='70%', fig.align='center', fig.pos='H', warning=FALSE, fig.cap="\\label{fig:bar} Number of days spent at the shelter by Month"}
+
+ggplot(data = animal_shelter, mapping = aes(x = factor(month),fill=month))+
+  geom_bar(stat="count", width= 0.5) +
+  labs(x = "Month", y = "The number of days",
+       title = "The number of days spent in the shelter by month") +
+  scale_x_discrete(labels = c("Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                              "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"))
+```
+
+Figure \ref{fig:bar} displays the barchart for the number of days spent in the shelter by month. We can see that the shelter accepts the most animals in July and the least animals in February. 
+
+## Year
+
+```{r}
+
+animal_shelter%>%
+  group_by(year)%>%
+  summarize(Count=length(time_at_shelter),Mean=mean(time_at_shelter),Std_dev=sd(time_at_shelter),
+                    Min=min(time_at_shelter),
+            Median=median(time_at_shelter),Max=max(time_at_shelter))%>%
+  kable(caption = '\\label{tab:summ1} Summary statistics of Number of days in shelter by Year .',
+booktabs = TRUE, format = "latex", digits=2) %>%
+  kable_styling(font_size = 10, latex_options = "hold_position")
+```
+
+Table \ref{tab:summ1} displays the summary statistics for number of days spent in the shelter in the years 2016 and 2017. We can see that a large number of animals were admitted in 2017. But the maximum number of days an animal spent in the shelter is in 2016.
+
+```{r scatter of year and time_in _shelter, include=TRUE, out.width='70%', fig.align='center', fig.pos='H', warning=FALSE, fig.cap="\\label{fig:col} Number of days spent at the shelter by Year"}
+
+animal_shelter$year <- as.factor(animal_shelter$year)
+ggplot(data = animal_shelter, aes(x = year, y = time_at_shelter, fill = year)) +
+  geom_col() +
+  labs(x = "The number of days spent in the shelter on different years", y = "The number of days")+ 
+  theme(legend.position = "none")
+```
+
+Figure \ref{fig:col} displays a barchart for number of days spent in shelter by the year. These results agree with what we concluded through the summary statistics earlier. We can see that the average number of days animals spent in shelter in 2016 is slightly larger than in 2017. But overall they are quite similar. 
+
+## Intake Type
+
+```{r}
+animal_shelter%>%
+  group_by(intake_type)%>%
+  summarize(Count=length(time_at_shelter),Mean=mean(time_at_shelter),Std_dev=sd(time_at_shelter),
+                    Min=min(time_at_shelter),
+            Median=median(time_at_shelter),Max=max(time_at_shelter))%>%
+  kable(caption = '\\label{tab:summ2} Summary statistics of Number of days in shelter by Intake type .',
+booktabs = TRUE, format = "latex", digits=2) %>%
+  kable_styling(font_size = 10, latex_options = "hold_position")
+
+```
+
+Table \ref{tab:summ2} displays the summary statistics for number of days spent in shelter by intake type. We can see that most of the animals admitted to the shelter were strays. On an average, Confiscated animals spent more number of days in the shelter with the maximum number of days spent in the shelter by an animal which was surrendered by the owner.
+
+```{r Boxplot of intake_type and time_in _shelter, include=TRUE, out.width='70%', fig.align='center', fig.pos='H', warning=FALSE, fig.cap="\\label{fig:box1} Number of days spent at the shelter by Intake type"}
+
+ggplot(data = animal_shelter, aes(x = intake_type, y = time_at_shelter, fill = intake_type)) +
+  geom_boxplot() +
+  labs(x = "The number of days spent in the shelter of different intake types", y = "The number of days")+ 
+  theme(legend.position = "none")
+```
+
+Figure \ref{fig:box1} displays a boxplot for number of days spent in the shelter by intake type. These are in line with the conclusions drawn from the summary statistics table. We see in the boxplot that the confiscated animals stayed in shelters the longest and the average number of days spent in shelter for animals abandoned by their owners was slightly lower than for lost animals. 
+
+## Chip Status
+
+```{r}
+animal_shelter%>%
+  group_by(chip_status)%>%
+  summarize(Count=length(time_at_shelter),Mean=mean(time_at_shelter),Std_dev=sd(time_at_shelter),
+                    Min=min(time_at_shelter),
+            Median=median(time_at_shelter),Max=max(time_at_shelter))%>%
+  kable(caption = '\\label{tab:summ3} Summary statistics of Number of days in shelter by Chip Status .',
+booktabs = TRUE, format = "latex", digits=2) %>%
+  kable_styling(font_size = 10, latex_options = "hold_position")
+```
+
+Table \ref{tab:summ3} displays the summary statistics for number of days in shelter by the Chip status. Most animals admitted to the shelter had no chips. 
+
+```{r Scatter plot of chip_status and time_in _shelter, include=TRUE, out.width='70%', fig.align='center', fig.pos='H', warning=FALSE, fig.cap="\\label{fig:scat} Number of days spent at the shelter by Chip Status"}
+
+ggplot(data = animal_shelter, aes(x = chip_status, y = time_at_shelter, fill = chip_status)) +
+  geom_point() +
+  labs(x = "The number of days spent in the shelter of different chip status", y = "The number of days")+ 
+  theme(legend.position = "none")
+```
+
+Figure \ref{fig:scat} displays the scatter plot for the number of days spent in shelter by the Chip status. The mean number of days that animals with chips spent in shelter was almost the same as animals that without scanchips, and higher than animals who were not able to be scanned.
+
+## Outcome Type
+
+```{r}
+animal_shelter%>%
+  group_by(outcome_type)%>%
+  summarize(Count=length(time_at_shelter),Mean=mean(time_at_shelter),Std_dev=sd(time_at_shelter),
+                    Min=min(time_at_shelter),
+            Median=median(time_at_shelter),Max=max(time_at_shelter))%>%
+  kable(caption = '\\label{tab:summ4} Summary statistics of Number of days in shelter by Outcome type.',
+booktabs = TRUE, format = "latex", digits=2) %>%
+  kable_styling(font_size = 10, latex_options = "hold_position")
+```
+
+Table \ref{tab:summ4} displays the summary statistics for the number of days by the Outcome type. We can see that most number of animals were adopted but after they spent a fairly long number of days in the shelter. Many animals were euthanized and some were returned to the owner after they spent a few days in the shelter. Very few number of animals died as well.
+
+```{r scatter of outcome_type and time_in _shelter, include=TRUE, out.width='70%', fig.align='center', fig.pos='H', warning=FALSE, fig.cap="\\label{fig:scat1} Number of days spent at the shelter by Outcome Type"}
+
+ggplot(data = animal_shelter, aes(x = outcome_type, y = time_at_shelter, fill = chip_status)) +
+  geom_point() +
+  labs(x = "The number of days spent in the shelter for different outcome types", y = "The number of days")+ 
+  theme(legend.position = "none")
+```
+
+Figure \ref{fig:scat1} displays the scatter plot for the number of days spent in shelter by the outcome type. The results here are similar to the ones from the summary statistics table. 
+
+Now, let's fit a generalized linear model to see which factors are significant predictors for the number of days an animal spends in shelter.
