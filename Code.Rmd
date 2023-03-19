@@ -13,13 +13,22 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r libraries}
+library(knitr)
 library(tidyverse)
 library(dplyr)
 library(kableExtra)
+library(MASS)
+library(ggplot2)
+library(sjPlot)
+library(stats) 
+library(jtools)
+library(ggpubr)
+library(GGally)
+library(gridExtra)
+library(AER)
 ```
 
 ```{r reading dataset, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
 #Reading in the data
 animal_shelter<-read.csv("dataset18.csv")
 #Summary of data
@@ -205,3 +214,188 @@ ggplot(data = animal_shelter, aes(x = outcome_type, y = time_at_shelter, fill = 
 Figure \ref{fig:scat1} displays the scatter plot for the number of days spent in shelter by the outcome type. The results here are similar to the ones from the summary statistics table. 
 
 Now, let's fit a generalized linear model to see which factors are significant predictors for the number of days an animal spends in shelter.
+
+# Formal Aanlysis {#sec:sub}
+
+As we need to predict what all factors affect the number of days an animal spends in the shelter by fitting a Generalised Linear Model, the number of days will be our response variable. This variable is actually a counts data, hence the distribution that we would consider first is Poisson distribution.
+
+```{r fit poisson GLM model, include=TRUE}
+#Fitting a full GLM using poisson distribution.
+pois_model<-glm(time_at_shelter ~ animal_type + month + year + intake_type + outcome_type + chip_status,data = animal_shelter,family="poisson")
+
+summary(pois_model) #Summary
+```
+
+From this model, we can see that Animal type is not a significant variable. The p-value for all the types of animal is greater than 0.05. Hence, we can conclude that the animal type does not have a significant effect on the number of days an animal spends in the shelter. We will drop this variable and fit the model again.
+
+```{r fit poisson GLM model without animal type, include=TRUE}
+#Fitting the same model, without the variable animal_type.
+pois_model2<-glm(time_at_shelter ~ month + year + intake_type + outcome_type + chip_status,data = animal_shelter,family="poisson")
+
+summary(pois_model2)
+```
+
+After removing animal type which was not significant, the AIC for the model increased by almost 30 points which is absurd. Both the residual deviance and the AIC are really high for this model. If we check the ratio for Residual deviance to the degrees of freedom for both the models, it is quite higher than 1. This might be due to Overdispersion. We can do some other tests to check for overdispersion.
+
+```{r check the overdispersion by plot, include=TRUE}
+ggplot(pois_model, aes(x=log(fitted(pois_model)), y=log((animal_shelter$time_at_shelter-fitted(pois_model))^2)))+
+  geom_point(col="red") +
+  geom_abline(slope=1, intercept=0, col="blue", size=1) +
+  ylab(expression((y-hat(mu))^2)) + xlab(expression(hat(mu)))
+```
+The above figure does not give us a clear picture for overdispersion. Hence we can use some in-built functions to check for the same.
+
+```{r check for overdispersion through function, include=TRUE}
+dispersiontest(pois_model,trafo=1)
+```
+
+Here, the estimated value for alpha is much greater than 0. Hence, we can conclude that overdispersion is present. In order to deal with this, instead of fitting a model with poisson distribution, we can fit a model with Negative Binomial distribution.
+
+```{r fit the negative.binomial GLM model, include=TRUE}
+#Model fitted using negative binomial distribution and all the variables,
+nebi_model1<-glm.nb(time_at_shelter ~ animal_type + month + year + intake_type + outcome_type + chip_status,data = animal_shelter)
+
+nebi_model1 %>%
+  summary()
+```
+
+From the model, we can see that the AIC has significantly reduced along with the Deviance. On the other hand, there are three variables now that are not significant, animal type, month and year. The p-value for all these variables is greater than 0.05. Hence, we can say we have sufficient evidence to conclude that these variables do not significantly affect the number of days spent in the shelter by animals. We can confirm the significance of variables by the following test first.
+
+```{r determine the significance of the regression coefficients, include=TRUE}
+drop1(nebi_model1, test = "F")
+```
+
+Now, we can fit our model by removing the insignificant variables.
+
+```{r delete unsignificant coefficient, include=TRUE}
+#delete insignificant animal_type and month and year to fit a new Nebi GLM model
+  nebi_model2<-glm(time_at_shelter~ intake_type + outcome_type + chip_status, 
+                            family = negative.binomial(0.9634), data = animal_shelter)
+  
+  nebi_model2%>%
+    summary()
+
+```
+
+We can see here, that after removing the three variables the AIC and Deviance have increased slightly. But this change is very low and hence acceptable with the change in the degrees of freedom. We can check once again for the significance of the remaining variables through the F-test.
+
+```{r determine the significance of coefficients, include=TRUE}
+#determine the significance of the regression coefficients
+drop1(nebi_model2, test = "F")
+```
+
+From the above test we can conclude that no more variables can be removed from the model here. As with the drop of each variable, the AIC and Deviance are both increasing significantly. 
+
+```{r compare poisson and final negative binomial models at their deviance and AIC, include=TRUE}
+c(pois_model2$deviance, pois_model2$aic)
+c(nebi_model2$deviance, nebi_model2$aic)
+```
+When we compare the poisson model fitted earlier with the negative binomial model, we can see that the AIC and Deviance have dropped a lot. Hence, using negative binomial distribution for this model fit was a better option.
+
+Thus, this is our final model now. We now need to check if this model is fulfilling all the assumptions.
+
+
+```{r check the large deviance, include=TRUE,out.width='70%', fig.align='center', fig.pos='H', warning=FALSE, fig.cap="\\label{fig:res} Plots for Pearson and Deviance residuals"}
+
+resp <- resid(nebi_model2, type = "pearson")
+resd <- resid(nebi_model2, type = "deviance")
+p1<- ggplot(nebi_model2, aes(sample = resp)) + geom_point(stat = "qq", color = "green") +
+  ylab("Pearson residuals")
+p2<- ggplot(nebi_model2, aes(sample = resd)) + geom_point(stat = "qq", color = "green") +
+  ylab("Deviance residuals")
+p3<- ggplot(nebi_model2, aes(x = predict(nebi_model2, type="link"), y =resd))+
+  geom_point(col = "green") +
+  geom_jitter(width = 10,height = 10, col="green")+
+  ylab("Deviance residuals") + xlab("Linear predictor")
+grid.arrange(p1, p2, p3, nrow = 1)
+
+```
+
+Figure \ref{fig:res} displays the graphs of residuals from our model. From the first two graphs, we can see that all the points are not following a straight line exactly. Although, in the second graph there is a roughly straight line, In both the graphs, there is an outlier clearly visible. The third graph which is a plot of Deviance against the linear predictor shows no obvious pattern, hence we can say that the assumption of nonlinearity is being followed here.
+
+```{r residuals versus fitted values, include=TRUE,out.width='70%', fig.align='center', fig.pos='H', warning=FALSE, fig.cap="\\label{fig:res2} Plots for Residuals and Standardised Residuals against Fitted values"}
+
+std.res=rstandard(nebi_model2)
+p4 = ggplot(nebi_model2, aes(nebi_model2$fitted.values, nebi_model2$residuals)) + 
+  labs(x="Fitted values", y="Residuals")+
+  geom_point() +
+  geom_jitter(width = 10,height = 10)+
+  geom_hline(yintercept = 0) +
+  geom_smooth(se = FALSE)
+
+p5 = ggplot(nebi_model2, aes(nebi_model2$fitted.values, std.res)) +
+  labs(x="Fitted values", y="Standardised residuals")+
+  geom_point() +
+  geom_jitter(width = 10,height = 10)+
+  geom_hline(yintercept = 0) +
+  geom_smooth(se = FALSE)
+
+grid.arrange(p4,p5,nrow=1)
+```
+
+Figure \ref{fig:res2} displays plots for Residuals and Standardised residuals against Fitted values. From these plots, we can see that most of the points are evenly spread above and below zero, hence indicating zero mean. The variance also appears to be fairly constant.
+
+```{r qq-plot, include=TRUE,out.width='70%', fig.align='center', fig.pos='H', warning=FALSE, fig.cap="\\label{fig:res3} Normal probability plot"}
+ggplot(nebi_model2) +
+  stat_qq(aes(sample = std.res)) +
+  geom_abline()
+```
+
+Figure \ref{fig:res3} displays the QQ-Plot for the model. From the plot, we can see that normality assumption is not being followed perfectly, with most of the points lying below the line. 
+
+```{r, include=TRUE,out.width='70%', fig.align='center', fig.pos='H', warning=FALSE, fig.cap="\\label{fig:res4} Cook's distance" }
+cookd=cooks.distance(nebi_model2)
+
+ggplot(nebi_model2, aes(seq_along(cookd), cookd))+
+  geom_bar(stat="identity", position="identity")+
+    xlab("Obs. Number")+
+  ylab("Cook's distance")+
+  ggtitle("Cook's distance")+
+  theme_bw()
+    
+```
+
+Figure \ref{fig:res4} displays the plot for Cook's distance for all the observations. We can see that there are two points which have really large Cook's distance.
+
+## Outliers 
+
+From the graphs for all the diagnostic checks we saw that there are a number of outliers in our model. We can try fixing this by exluding some of the observations coming as outliers from our data.
+
+```{r deleting outliers, include=TRUE}
+animal_shelter2<-animal_shelter %>%
+  filter(time_at_shelter<=20)
+```
+
+```{r final model4,include=TRUE}
+#final nebi model without outliers
+nebi_model3<-glm(time_at_shelter~intake_type+outcome_type+chip_status, 
+                 family = negative.binomial(0.9634), data = animal_shelter2)
+
+nebi_model3%>%
+  summary()
+```
+
+```{r significant coefficients,include=TRUE}
+#determine the significance of the regression coefficients
+drop1(nebi_model3, test = "F")
+```
+
+```{R assumption check, include = FALSE}
+resp <- resid(nebi_model3, type = "pearson")
+resd <- resid(nebi_model3, type = "deviance")
+p1<- ggplot(nebi_model3, aes(sample = resp)) + geom_point(stat = "qq", color = "green") +
+  ylab("Pearson residuals")
+p2<- ggplot(nebi_model3, aes(sample = resd)) + geom_point(stat = "qq", color = "green") +
+  ylab("Deviance residuals")
+p3<- ggplot(nebi_model3, aes(x = predict(nebi_model3, type="link"), y =resd))+
+  geom_point(col = "green") +
+  geom_jitter(width = 10,height = 10, col="green")+
+  ylab("Deviance residuals") + xlab("Linear predictor")
+grid.arrange(p1, p2, p3, nrow = 1)
+
+ggplot(nebi_model3) +
+  stat_qq(aes(sample = rstandard(nebi_model3))) +
+  geom_abline()
+```
+
+
