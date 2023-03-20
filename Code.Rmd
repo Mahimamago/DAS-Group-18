@@ -220,7 +220,7 @@ Figure \ref{fig:scat1} displays the boxplot for the number of days spent in shel
 
 Now, let's fit a generalized linear model to see which factors are significant predictors for the number of days an animal spends in shelter.
 
-# Formal Aanlysis {#sec:sub}
+# Formal Aanlysis {#sec:sub2}
 
 Our response variable, the number of days spent by an animal in the shelter is actually a counts data, hence the distribution that we would consider first is Poisson distribution.
 
@@ -302,12 +302,13 @@ drop1(nebi_model2, test = "F")
 From the above test we can conclude that no more variables can be removed from the model here. As with the drop of each variable, the AIC and Deviance are both increasing significantly. 
 
 ```{r compare poisson and final negative binomial models at their deviance and AIC, include=TRUE}
-c(pois_model2$deviance, pois_model2$aic)
+c(pois_model$deviance, pois_model$aic)
 c(nebi_model2$deviance, nebi_model2$aic)
 ```
 
 Thus, this is our final model now. We now need to check if this model is fulfilling all the assumptions.
 
+## Assumptions checking
 
 ```{r check the large deviance, include=TRUE,out.width='70%', fig.align='center', fig.pos='H', warning=FALSE, fig.cap="\\label{fig:res} Plots for Pearson and Deviance residuals"}
 
@@ -393,7 +394,7 @@ nebi_model3%>%
 
 After removing the outliers from our data, the model deviance and AIC have reduced further. Thus, removing the outliers has contributed to a model that is a better fit to our data. We can further analyze the effect through different graphs.
 
-```{r check the large deviance, include=TRUE,out.width='70%', fig.align='center', fig.pos='H', warning=FALSE, fig.cap="\\label{fig:res5} Plots for Pearson and Deviance residuals"}
+```{r check the large deviance for model without outliers, include=TRUE,out.width='70%', fig.align='center', fig.pos='H', warning=FALSE, fig.cap="\\label{fig:res5} Plots for Pearson and Deviance residuals"}
 
 resp2 <- resid(nebi_model3, type = "pearson")
 resd2 <- resid(nebi_model3, type = "deviance")
@@ -409,7 +410,7 @@ grid.arrange(P1, P2, P3, nrow = 1)
 
 ```
 
-```{r residuals versus fitted values, include=TRUE,out.width='70%', fig.align='center', fig.pos='H', warning=FALSE, fig.cap="\\label{fig:res6} Plots for Residuals and Standardised Residuals against Fitted values"}
+```{r residuals versus fitted values for model without outliers, include=TRUE,out.width='70%', fig.align='center', fig.pos='H', warning=FALSE, fig.cap="\\label{fig:res6} Plots for Residuals and Standardised Residuals against Fitted values"}
 #Checking mean and variance for residuals.
 std.res2=rstandard(nebi_model3)
 P4 = ggplot(nebi_model3, aes(nebi_model3$fitted.values, nebi_model3$residuals)) + 
@@ -429,7 +430,7 @@ P5 = ggplot(nebi_model3, aes(nebi_model3$fitted.values, std.res2)) +
 grid.arrange(P4,P5,nrow=1)
 ```
 
-```{r qq-plot, include=TRUE,out.width='70%', fig.align='center', fig.pos='H', warning=FALSE, fig.cap="\\label{fig:res7} Normal probability plot"}
+```{r qq-plot for model without outliers, include=TRUE,out.width='70%', fig.align='center', fig.pos='H', warning=FALSE, fig.cap="\\label{fig:res7} Normal probability plot"}
 #Checking the normality assumption for the residuals.
 ggplot(nebi_model3) +
   stat_qq(aes(sample = std.res2)) +
