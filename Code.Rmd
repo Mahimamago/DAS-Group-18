@@ -2,29 +2,390 @@
 title: "Factors Influencing Length of Stay for Animals "
 author: "Mahima Mago, Wei Cai, Haichao Liu, Yuheng Pan, Mengyu Zhang"
 date: "2023-03-10"
-output: html_document
+output:
+  pdf_document:
+    number_sections: yes
+fig_caption : yes
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
-
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
+```{r libraries}
+#Packages to be used
+library(knitr)
+library(tidyverse)
+library(dplyr)
+library(kableExtra)
+library(MASS)
+library(ggplot2)
+library(sjPlot)
+library(stats) 
+library(jtools)
+library(ggpubr)
+library(GGally)
+library(gridExtra)
+library(AER)
 ```
 
-## Including Plots
-
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
+```{r reading dataset, include=TRUE}
+#Reading in the data
+animal_shelter<-read.csv("dataset18.csv")
+#Summary of data
+head(animal_shelter)
+glimpse(animal_shelter)
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+```{r additinal code}
+
+#Data transformation for EDA
+
+animal_shelter$animal_type <- as.factor(animal_shelter$animal_type)
+levels(animal_shelter$chip_status) <- c("BIRD", "DOG","CAT","WILDLIFE","LIVESTOCK")
+animal_shelter$intake_type <- as.factor(animal_shelter$intake_type)
+animal_shelter$outcome_type <- as.factor(animal_shelter$outcome_type)
+animal_shelter$chip_status <- as.factor(animal_shelter$chip_status)
+
+```
+
+\newpage
+
+# Introduction {#sec:intro}
+
+Dallas animal shelter is a shelter home for a variety of animals. Analysis has been conducted on behalf of the shelter management to find out the factors that influence the number of days an animal spends in the shelter before their final outcome is decided. Data was collected for 1,135 different types of animals with the information including the month and year of the intake along with the reason for the animal being admitted to the shelter. Data also included whether the animal had a microchip with the owner information, the final outcome for the admitted animal and the number of days the animal spent at the shelter starting from the day of admission till the final outcome. 
+
+This report includes the numerical and graphical summaries for all the variables present in the dataset and fits a generalized linear model to analyse the significance of each of the variable on the number of days spent by an animal in the shelter.
+
+# Exploratory Aanlysis {#sec:sub}
+
+Below graph displays the probability density function of our response variable, the number of days spent by an animal in the shelter.
+
+```{r pdf of number of days animal spends in the shelter, include=TRUE, out.width='70%', fig.align='center', fig.pos='H', warning=FALSE, fig.cap="\\label{fig:dens} Density plot for the Number of days spent in the shelter"}
+ggplot(animal_shelter, aes(x = time_at_shelter)) + 
+  geom_density(color = "blue")+
+  labs(x="Number of days at Shelter", title="Density plot for the number of days at shelter")
+
+```
+
+From Figure \ref{fig:dens}, our response variable appears to have a right skewed distribution. It seems that most of the animals have spent less than 20 days in the shelter.
+
+## Types of Animals
+
+```{r}
+animal_shelter%>%
+  group_by(animal_type)%>%
+  summarize(Count=length(time_at_shelter),Mean=mean(time_at_shelter),Std_dev=sd(time_at_shelter),
+            Min=min(time_at_shelter),
+            Median=median(time_at_shelter),Max=max(time_at_shelter))%>%
+  kable(caption = '\\label{tab:summ} Summary statistics of Number of days in shelter by Animal type .',
+booktabs = TRUE, format = "latex", digits=2) %>%
+  kable_styling(font_size = 10, latex_options = "hold_position")
+
+```
+
+Table \ref{tab:summ} displays the summary statistics for the number of days spent in the shelter by the types of animals. Here, we can see that most animals admitted to the shelter are dogs and the least are birds and livestock. Again, on an average dogs have stayed the longest in the shelter as they have the largest mean number of days followed by cats whereas birds along with livestock left at the same day as they were admitted. 
+
+```{r barchart and boxplot of animal_type and time_in _shelter, include=TRUE, out.width='70%', fig.align='center', fig.pos='H', warning=FALSE, fig.cap="\\label{fig:box} Number of days spent at the shelter by Animal type"}
+ggplot(data = animal_shelter, aes(x = animal_type, y = time_at_shelter, fill = animal_type)) +
+  geom_boxplot() +
+  labs(x = "The number of days spent in the shelter of different animals", y = "The number of days")+ 
+  theme(legend.position = "none")
+```
+
+Figure \ref{fig:box} displays a boxplot of the number of days spent by the different types of animals in the shelter.
+The results from here agree with what we have concluded from the Summary statistics earlier. It can also be seen that Dogs and Cats have a lot of outliers.
+
+## Months
+
+```{r factor month,include=FALSE}
+animal_shelter$month
+factor(animal_shelter$month)
+```
+
+```{r Barchart of month and time_in _shelter, include=TRUE,out.width='70%', fig.align='center', fig.pos='H', warning=FALSE, fig.cap="\\label{fig:bar} Number of days spent at the shelter by Month"}
+
+ggplot(data = animal_shelter, mapping = aes(x = factor(month),fill=month))+
+  geom_bar(stat="count", width= 0.5) +
+  labs(x = "Month", y = "The number of days",
+       title = "The number of days spent in the shelter by month") +
+  scale_x_discrete(labels = c("Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                              "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"))
+```
+
+Figure \ref{fig:bar} displays the barchart for the number of days spent in the shelter by month. We can see that the shelter accepts the most animals in July and the least animals in February. 
+
+## Year
+
+```{r}
+
+animal_shelter%>%
+  group_by(year)%>%
+  summarize(Count=length(time_at_shelter),Mean=mean(time_at_shelter),Std_dev=sd(time_at_shelter),
+                    Min=min(time_at_shelter),
+            Median=median(time_at_shelter),Max=max(time_at_shelter))%>%
+  kable(caption = '\\label{tab:summ1} Summary statistics of Number of days in shelter by Year .',
+booktabs = TRUE, format = "latex", digits=2) %>%
+  kable_styling(font_size = 10, latex_options = "hold_position")
+```
+
+Table \ref{tab:summ1} displays the summary statistics for number of days spent in the shelter in the years 2016 and 2017. We can see that a large number of animals were admitted in 2017. But the maximum number of days an animal spent in the shelter is in 2016.
+
+```{r scatter of year and time_in _shelter, include=TRUE, out.width='70%', fig.align='center', fig.pos='H', warning=FALSE, fig.cap="\\label{fig:col} Number of days spent at the shelter by Year"}
+
+animal_shelter$year <- as.factor(animal_shelter$year)
+ggplot(data = animal_shelter, aes(x = year, y = time_at_shelter, fill = year)) +
+  geom_col() +
+  labs(x = "The number of days spent in the shelter on different years", y = "The number of days")+ 
+  theme(legend.position = "none")
+```
+
+Figure \ref{fig:col} displays a barchart for number of days spent in shelter by the year. These results agree with what we concluded through the summary statistics earlier. 
+
+## Intake Type
+
+```{r}
+animal_shelter%>%
+  group_by(intake_type)%>%
+  summarize(Count=length(time_at_shelter),Mean=mean(time_at_shelter),Std_dev=sd(time_at_shelter),
+                    Min=min(time_at_shelter),
+            Median=median(time_at_shelter),Max=max(time_at_shelter))%>%
+  kable(caption = '\\label{tab:summ2} Summary statistics of Number of days in shelter by Intake type .',
+booktabs = TRUE, format = "latex", digits=2) %>%
+  kable_styling(font_size = 10, latex_options = "hold_position")
+
+```
+
+Table \ref{tab:summ2} displays the summary statistics for number of days spent in shelter by intake type. We can see that most of the animals admitted to the shelter were strays. On an average, Confiscated animals spent more number of days in the shelter with the maximum number of days spent by an animal which was surrendered by the owner.
+
+```{r Boxplot of intake_type and time_in _shelter, include=TRUE, out.width='70%', fig.align='center', fig.pos='H', warning=FALSE, fig.cap="\\label{fig:box1} Number of days spent at the shelter by Intake type"}
+
+ggplot(data = animal_shelter, aes(x = intake_type, y = time_at_shelter, fill = intake_type)) +
+  geom_boxplot() +
+  labs(x = "The number of days spent in the shelter of different intake types", y = "The number of days")+ 
+  theme(legend.position = "none")
+```
+
+Figure \ref{fig:box1} displays a boxplot for number of days spent in the shelter by intake type. These are in line with the conclusions drawn from the summary statistics table. We see in the boxplot that the confiscated animals stayed in shelter the longest and the average number of days spent in shelter for animals abandoned by their owners was slightly lower than for lost animals. The intake types "Owner surrender" and "Stray" have a lot of outliers.
+
+## Chip Status
+
+```{r}
+animal_shelter%>%
+  group_by(chip_status)%>%
+  summarize(Count=length(time_at_shelter),Mean=mean(time_at_shelter),Std_dev=sd(time_at_shelter),
+                    Min=min(time_at_shelter),
+            Median=median(time_at_shelter),Max=max(time_at_shelter))%>%
+  kable(caption = '\\label{tab:summ3} Summary statistics of Number of days in shelter by Chip Status .',
+booktabs = TRUE, format = "latex", digits=2) %>%
+  kable_styling(font_size = 10, latex_options = "hold_position")
+```
+
+Table \ref{tab:summ3} displays the summary statistics for number of days in shelter by the Chip status. Most animals admitted to the shelter had no chips. 
+
+```{r bar plot of chip_status and time_in _shelter, include=TRUE, out.width='70%', fig.align='center', fig.pos='H', warning=FALSE, fig.cap="\\label{fig:scat} Number of days spent at the shelter by Chip Status"}
+
+ggplot(data = animal_shelter, aes(x = chip_status, y = time_at_shelter, fill = chip_status)) +
+  geom_boxplot() +
+  labs(x = "The number of days spent in the shelter of different chip status", y = "The number of days")+ 
+  theme(legend.position = "none")
+```
+
+Figure \ref{fig:scat} displays the boxplot for the number of days spent in shelter by the Chip status. The mean number of days that animals with chips spent in shelter was almost the same as animals that without scan chips, and higher than animals who were not able to be scanned.
+
+## Outcome Type
+
+```{r}
+animal_shelter%>%
+  group_by(outcome_type)%>%
+  summarize(Count=length(time_at_shelter),Mean=mean(time_at_shelter),Std_dev=sd(time_at_shelter),
+                    Min=min(time_at_shelter),
+            Median=median(time_at_shelter),Max=max(time_at_shelter))%>%
+  kable(caption = '\\label{tab:summ4} Summary statistics of Number of days in shelter by Outcome type.',
+booktabs = TRUE, format = "latex", digits=2) %>%
+  kable_styling(font_size = 10, latex_options = "hold_position")
+```
+
+Table \ref{tab:summ4} displays the summary statistics for the number of days by the Outcome type. We can see that most number of animals were adopted but after they spent a fairly long number of days in the shelter. Many animals were euthanized and some were returned to the owner after they spent a few days in the shelter. Very few number of animals died as well.
+
+```{r boxplot of outcome_type and time_in _shelter, include=TRUE, out.width='70%', fig.align='center', fig.pos='H', warning=FALSE, fig.cap="\\label{fig:scat1} Number of days spent at the shelter by Outcome Type"}
+
+ggplot(data = animal_shelter, aes(x = outcome_type, y = time_at_shelter, fill = outcome_type)) +
+  geom_boxplot() +
+  labs(x = "The number of days spent in the shelter for different outcome types", y = "The number of days")+ 
+  theme(legend.position = "none")
+```
+
+Figure \ref{fig:scat1} displays the boxplot for the number of days spent in shelter by the outcome type. The results here are similar to the ones from the summary statistics table. 
+
+## Outliers
+
+From the above graphical analysis, we could see that there are a lot of outliers in our data. Fitting a model on a dataset with these many outliers might not give us a good fit, thus it is better to remove them. Most of the animals stayed in the shelter for not more than 20 days, hence we can filter out observations that have days greater than 20.
+
+```{r deleting outliers, include=TRUE}
+animal_shelter2<-animal_shelter %>%
+  filter(time_at_shelter<=20)
+```
+
+Now, let's fit a generalized linear model to see which factors are significant predictors for the number of days an animal spends in shelter.
+
+# Formal Aanlysis {#sec:sub2}
+
+Our response variable, the number of days spent by an animal in the shelter is actually a counts data, hence the distribution that we would consider first is Poisson distribution.
+
+## Poisson Model
+
+```{r fit poisson GLM model, include=TRUE}
+#Fitting a full GLM using poisson distribution.
+pois_model<-glm(time_at_shelter ~ animal_type + month + year + intake_type + outcome_type + chip_status,data = animal_shelter2,family="poisson")
+
+summary(pois_model) #Summary
+```
+
+From this model, we can see that Animal type is not a significant variable. The p-value for all the types of animal is greater than 0.05. Hence, we can conclude that there is a need for further variable selection.
+
+The Deviance and AIC for this model are quite high. This indicates that our model does not fit the data well. If we look at the ratio for Residual deviance to the degrees of freedom, it is quite higher than 1. This might be due to Overdispersion. We can do some other tests to check for overdispersion.
+
+```{r check the overdispersion by plot, include=TRUE}
+ggplot(pois_model, aes(x=log(fitted(pois_model)), y=log((animal_shelter2$time_at_shelter-fitted(pois_model))^2)))+
+  geom_point(col="red") +
+  geom_jitter(width = 10, height = 10, col="red")+
+  geom_abline(slope=1, intercept=0, col="blue", size=1) +
+  ylab(expression((y-hat(mu))^2)) + xlab(expression(hat(mu)))
+```
+The above figure does not give us a clear picture for overdispersion. Hence we can use some other functions to check for the same.
+
+```{r check for overdispersion through function, include=TRUE}
+dispersiontest(pois_model,trafo=1)
+```
+
+Here, the estimated value for alpha is much greater than 0. Hence, we can conclude that overdispersion is present. There are two ways to deal with this.
+
+## Quasi-Poisson Model
+
+```{r fit the quasi poisson model, inclue TRUE}
+X=sum(resid(pois_model, type = "pearson")^2)
+dp=X/pois_model$df.residual
+summary(pois_model,dispersion = dp)
+```
+
+The Deviance and AIC values have not changed here, they are still very high. Hence, the Quasi-Poisson model does not appear to be a much better fit.
+
+## Negative Binomial Model
+
+```{r fit the negative.binomial GLM model, include=TRUE}
+#Model fitted using negative binomial distribution and all the variables,
+nebi_model1<-glm.nb(time_at_shelter ~ animal_type + month + year + intake_type + outcome_type + chip_status,data = animal_shelter2)
+
+nebi_model1 %>%
+  summary()
+```
+
+From the model, we can see that the AIC has significantly reduced along with the Deviance. The ratio of residual deviance and degrees of freedom is also close to 1 now. Thus, the model with Negative Binomial distribution appears to be a much better fit for the data.
+
+From this model, we can see that there are three variables that are not significant, animal type, month and year. The p-value for all these variables is greater than 0.05. Hence, we can say we have sufficient evidence to conclude that these variables do not significantly affect the number of days spent in the shelter by animals. We can further confirm the significance of variables by the following test.
+
+```{r determine the significance of the regression coefficients, include=TRUE}
+drop1(nebi_model1, test = "F")
+```
+
+Now, we can fit our model by removing the insignificant variables.
+
+```{r delete unsignificant coefficient, include=TRUE}
+#delete insignificant animal_type and month and year to fit a new Nebi GLM model
+nebi_model2<-glm.nb(time_at_shelter~ intake_type + outcome_type + chip_status, 
+                            data = animal_shelter2)
+  
+nebi_model2%>%
+  summary()
+
+```
+
+We can see here, that after removing the three variables the AIC and Deviance have increased slightly. But this change is very low and hence acceptable with the change in the degrees of freedom. We can check once again for the significance of the remaining variables through the F-test.
+
+```{r determine the significance of coefficients, include=TRUE}
+#determine the significance of the regression coefficients
+drop1(nebi_model2, test = "F")
+```
+
+From the above test we can conclude that no more variables can be removed from the model here. As with the drop of each variable, the AIC and Deviance are both increasing significantly. 
+
+```{r compare poisson and final negative binomial models at their deviance and AIC, include=TRUE}
+c(pois_model$deviance, pois_model$aic)
+c(nebi_model2$deviance, nebi_model2$aic)
+```
+
+Thus, this is our final model now. We now need to check if this model is fulfilling all the assumptions.
+
+## Assumptions checking
+
+```{r check the large deviance, include=TRUE,out.width='70%', fig.align='center', fig.pos='H', warning=FALSE, fig.cap="\\label{fig:res} Plots for Pearson and Deviance residuals"}
+
+resp <- resid(nebi_model2, type = "pearson")
+resd <- resid(nebi_model2, type = "deviance")
+p1<- ggplot(nebi_model2, aes(sample = resp)) + geom_point(stat = "qq", color = "green") +
+  ylab("Pearson residuals")
+p2<- ggplot(nebi_model2, aes(sample = resd)) + geom_point(stat = "qq", color = "green") +
+  ylab("Deviance residuals")
+p3<- ggplot(nebi_model2, aes(x = predict(nebi_model2, type="link"), y =resd))+
+  geom_point(col = "green") +
+  geom_jitter(width = 10,height = 10, col="green")+
+  ylab("Deviance residuals") + xlab("Linear predictor")
+grid.arrange(p1, p2, p3, nrow = 1)
+
+```
+
+Figure \ref{fig:res} displays the graphs of residuals from our model. From the first two graphs, we can see that all the points are not following a straight line exactly. Although, in the second graph there is a roughly straight line, In both the graphs, there is an outlier clearly visible. The third graph which is a plot of Deviance against the linear predictor shows no obvious pattern, hence we can say that the assumption of nonlinearity is being followed here.
+
+```{r residuals versus fitted values, include=TRUE,out.width='70%', fig.align='center', fig.pos='H', warning=FALSE, fig.cap="\\label{fig:res2} Plots for Residuals and Standardised Residuals against Fitted values"}
+#Checking the mean and variance of the residuals.
+std.res=rstandard(nebi_model2)
+p4 = ggplot(nebi_model2, aes(nebi_model2$fitted.values, nebi_model2$residuals)) + 
+  labs(x="Fitted values", y="Residuals")+
+  geom_point() +
+  geom_jitter(width = 10,height = 10)+
+  geom_hline(yintercept = 0) +
+  geom_smooth(se = FALSE)
+
+p5 = ggplot(nebi_model2, aes(nebi_model2$fitted.values, std.res)) +
+  labs(x="Fitted values", y="Standardised residuals")+
+  geom_point() +
+  geom_jitter(width = 10,height = 10)+
+  geom_hline(yintercept = 0) +
+  geom_smooth(se = FALSE)
+
+grid.arrange(p4,p5,nrow=1)
+```
+
+Figure \ref{fig:res2} displays plots for Residuals and Standardised residuals against Fitted values. From these plots, we can see that most of the points are evenly spread above and below zero, hence indicating zero mean. The variance also appears to be fairly constant.
+
+```{r qq-plot, include=TRUE,out.width='70%', fig.align='center', fig.pos='H', warning=FALSE, fig.cap="\\label{fig:res3} Normal probability plot"}
+#Checking the normality assumption for residuals.
+ggplot(nebi_model2) +
+  stat_qq(aes(sample = std.res)) +
+  geom_abline()
+```
+
+Figure \ref{fig:res3} displays the QQ-Plot for the model. From the plot, we can see that normality assumption is not being followed perfectly, with most of the points lying below the line. 
+
+```{r, include=TRUE,out.width='70%', fig.align='center', fig.pos='H', warning=FALSE, fig.cap="\\label{fig:res4} Cook's distance" }
+#Cook's distance for all the observations.
+cookd=cooks.distance(nebi_model2)
+
+ggplot(nebi_model2, aes(seq_along(cookd), cookd))+
+  geom_bar(stat="identity", position="identity")+
+    xlab("Obs. Number")+
+  ylab("Cook's distance")+
+  ggtitle("Cook's distance")+
+  theme_bw()
+    
+```
+
+Figure \ref{fig:res4} displays the plot for Cook's distance for all the observations. We can see that there are two points which have really large Cook's distance.
+
+After looking at the graphs for the residuals of our model, we can see that the assumptions are still not being fulfilled completely. There are still many outliers present and further analysis needs to be done on this data to get a model with perfect fit.
+
+Since, the AIC and Deviance are the lowest for Model 2 with Negative Binomial distribution, we would select this model as the best fit for our data. Hence, on the basis of our best fit model we can conclude that the factors that influence the number of days an animal spends in the shelter before their final outcome is decided are the intake type, the outcome type and the chip status.
+
+
+
