@@ -293,8 +293,8 @@ Now, we can fit our model by removing the insignificant variables.
 
 ```{r delete unsignificant coefficient, include=TRUE}
 #delete insignificant animal_type and month and year to fit a new Nebi GLM model
-nebi_model2<-glm(time_at_shelter~ intake_type + outcome_type + chip_status, 
-                            family = negative.binomial(0.9634), data = animal_shelter2)
+nebi_model2<-glm.nb(time_at_shelter~ intake_type + outcome_type + chip_status, 
+                            data = animal_shelter2)
   
 nebi_model2%>%
   summary()
