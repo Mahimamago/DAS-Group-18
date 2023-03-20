@@ -218,6 +218,15 @@ ggplot(data = animal_shelter, aes(x = outcome_type, y = time_at_shelter, fill = 
 
 Figure \ref{fig:scat1} displays the boxplot for the number of days spent in shelter by the outcome type. The results here are similar to the ones from the summary statistics table. 
 
+## Outliers
+
+From the above graphical analysis, we could see that there are a lot of outliers in our data. Fitting a model on a dataset with these many outliers might not give us a good fit, thus it is better to remove them. Most of the animals stayed in the shelter for not more than 20 days, hence we can filter out observations that have days greater than 20.
+
+```{r deleting outliers, include=TRUE}
+animal_shelter2<-animal_shelter %>%
+  filter(time_at_shelter<=20)
+```
+
 Now, let's fit a generalized linear model to see which factors are significant predictors for the number of days an animal spends in shelter.
 
 # Formal Aanlysis {#sec:sub2}
@@ -228,7 +237,7 @@ Our response variable, the number of days spent by an animal in the shelter is a
 
 ```{r fit poisson GLM model, include=TRUE}
 #Fitting a full GLM using poisson distribution.
-pois_model<-glm(time_at_shelter ~ animal_type + month + year + intake_type + outcome_type + chip_status,data = animal_shelter,family="poisson")
+pois_model<-glm(time_at_shelter ~ animal_type + month + year + intake_type + outcome_type + chip_status,data = animal_shelter2,family="poisson")
 
 summary(pois_model) #Summary
 ```
@@ -238,7 +247,7 @@ From this model, we can see that Animal type is not a significant variable. The 
 The Deviance and AIC for this model are quite high. This indicates that our model does not fit the data well. If we look at the ratio for Residual deviance to the degrees of freedom, it is quite higher than 1. This might be due to Overdispersion. We can do some other tests to check for overdispersion.
 
 ```{r check the overdispersion by plot, include=TRUE}
-ggplot(pois_model, aes(x=log(fitted(pois_model)), y=log((animal_shelter$time_at_shelter-fitted(pois_model))^2)))+
+ggplot(pois_model, aes(x=log(fitted(pois_model)), y=log((animal_shelter2$time_at_shelter-fitted(pois_model))^2)))+
   geom_point(col="red") +
   geom_jitter(width = 10, height = 10, col="red")+
   geom_abline(slope=1, intercept=0, col="blue", size=1) +
@@ -266,7 +275,7 @@ The Deviance and AIC values have not changed here, they are still very high. Hen
 
 ```{r fit the negative.binomial GLM model, include=TRUE}
 #Model fitted using negative binomial distribution and all the variables,
-nebi_model1<-glm.nb(time_at_shelter ~ animal_type + month + year + intake_type + outcome_type + chip_status,data = animal_shelter)
+nebi_model1<-glm.nb(time_at_shelter ~ animal_type + month + year + intake_type + outcome_type + chip_status,data = animal_shelter2)
 
 nebi_model1 %>%
   summary()
@@ -285,7 +294,7 @@ Now, we can fit our model by removing the insignificant variables.
 ```{r delete unsignificant coefficient, include=TRUE}
 #delete insignificant animal_type and month and year to fit a new Nebi GLM model
 nebi_model2<-glm(time_at_shelter~ intake_type + outcome_type + chip_status, 
-                            family = negative.binomial(0.9634), data = animal_shelter)
+                            family = negative.binomial(0.9634), data = animal_shelter2)
   
 nebi_model2%>%
   summary()
@@ -374,85 +383,9 @@ ggplot(nebi_model2, aes(seq_along(cookd), cookd))+
 
 Figure \ref{fig:res4} displays the plot for Cook's distance for all the observations. We can see that there are two points which have really large Cook's distance.
 
-## Outliers 
+After looking at the graphs for the residuals of our model, we can see that the assumptions are still not being fulfilled completely. There are still many outliers present and further analysis needs to be done on this data to get a model with perfect fit.
 
-From the graphs for all the diagnostic checks, we can conclude that there are a number of outliers in our data that might be affecting the fit of our model. We can make a better fit model by excluding some of these outliers.
-
-```{r deleting outliers, include=TRUE}
-animal_shelter2<-animal_shelter %>%
-  filter(time_at_shelter<=20)
-```
-
-```{r final model3,include=TRUE}
-#final nebi model without outliers
-nebi_model3<-glm(time_at_shelter~intake_type+outcome_type+chip_status, 
-                 family = negative.binomial(0.9634), data = animal_shelter2)
-
-nebi_model3%>%
-  summary()
-```
-
-After removing the outliers from our data, the model deviance and AIC have reduced further. Thus, removing the outliers has contributed to a model that is a better fit to our data. We can further analyze the effect through different graphs.
-
-```{r check the large deviance for model without outliers, include=TRUE,out.width='70%', fig.align='center', fig.pos='H', warning=FALSE, fig.cap="\\label{fig:res5} Plots for Pearson and Deviance residuals"}
-
-resp2 <- resid(nebi_model3, type = "pearson")
-resd2 <- resid(nebi_model3, type = "deviance")
-P1<- ggplot(nebi_model3, aes(sample = resp2)) + geom_point(stat = "qq", color = "green") +
-  ylab("Pearson residuals")
-P2<- ggplot(nebi_model3, aes(sample = resd2)) + geom_point(stat = "qq", color = "green") +
-  ylab("Deviance residuals")
-P3<- ggplot(nebi_model3, aes(x = predict(nebi_model3, type="link"), y =resd2))+
-  geom_point(col = "green") +
-  geom_jitter(width = 10,height = 10, col="green")+
-  ylab("Deviance residuals") + xlab("Linear predictor")
-grid.arrange(P1, P2, P3, nrow = 1)
-
-```
-
-```{r residuals versus fitted values for model without outliers, include=TRUE,out.width='70%', fig.align='center', fig.pos='H', warning=FALSE, fig.cap="\\label{fig:res6} Plots for Residuals and Standardised Residuals against Fitted values"}
-#Checking mean and variance for residuals.
-std.res2=rstandard(nebi_model3)
-P4 = ggplot(nebi_model3, aes(nebi_model3$fitted.values, nebi_model3$residuals)) + 
-  labs(x="Fitted values", y="Residuals")+
-  geom_point() +
-  geom_jitter(width = 10,height = 10)+
-  geom_hline(yintercept = 0) +
-  geom_smooth(se = FALSE)
-
-P5 = ggplot(nebi_model3, aes(nebi_model3$fitted.values, std.res2)) +
-  labs(x="Fitted values", y="Standardised residuals")+
-  geom_point() +
-  geom_jitter(width = 10,height = 10)+
-  geom_hline(yintercept = 0) +
-  geom_smooth(se = FALSE)
-
-grid.arrange(P4,P5,nrow=1)
-```
-
-```{r qq-plot for model without outliers, include=TRUE,out.width='70%', fig.align='center', fig.pos='H', warning=FALSE, fig.cap="\\label{fig:res7} Normal probability plot"}
-#Checking the normality assumption for the residuals.
-ggplot(nebi_model3) +
-  stat_qq(aes(sample = std.res2)) +
-  geom_abline()
-```
-
-```{r, include=TRUE,out.width='70%', fig.align='center', fig.pos='H', warning=FALSE, fig.cap="\\label{fig:res8} Cook's distance" }
-#Cook's distance for all the observations.
-cookd2=cooks.distance(nebi_model3)
-
-ggplot(nebi_model3, aes(seq_along(cookd2), cookd2))+
-  geom_bar(stat="identity", position="identity")+
-    xlab("Obs. Number")+
-  ylab("Cook's distance")+
-  ggtitle("Cook's distance")+
-  theme_bw()
-    
-```
-
-After looking at the graphs for the residuals of our model without outliers, we can see that the assumptions are still not being fulfilled completely. There are still many outliers present and further analysis needs to be done on this data to get a model with perfect fit.
-
-Since, the AIC and Deviance have reduced further after removing outliers, we would select Model 4 as the best fit for our data, with Negative Binomial distribution. Hence, on the basis of our best fit model we can conclude that the factors that influence the number of days an animal spends in the shelter before their final outcome is decided are the intake type, the outcome type and the chip status.
+Since, the AIC and Deviance are the lowest for Model 2 with Negative Binomial distribution, we would select this model as the best fit for our data. Hence, on the basis of our best fit model we can conclude that the factors that influence the number of days an animal spends in the shelter before their final outcome is decided are the intake type, the outcome type and the chip status.
 
 
 
