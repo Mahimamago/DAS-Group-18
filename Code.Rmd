@@ -1,6 +1,6 @@
 ---
-title: "Code"
-author: "Mahima Mago"
+title: "Factors Influencing Length of Stay for Animals "
+author: "Mahima Mago, Wei Cai, Haichao Liu, Yuheng Pan, Mengyu Zhang"
 date: "2023-03-10"
 output: html_document
 ---
